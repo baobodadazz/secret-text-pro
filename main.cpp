@@ -6,49 +6,13 @@
 #include <iostream>
 #include <string>
 #include <fstream>
+#include "bocode64.h"
 
 #define FILE_ENCODE 10001
 #define FILE_DECODE 10002
+#define ENCODE_BUFFER_SIZE 6144
 
 using string = std::string;
-
-string QUEEN = "`1234567890-=~!@#$%^&*()_+qwertyuiop[]asdfghjkl;zxcvbnmQWERTYUIO";
-
-//传入数据data，r是一个3个字节的指针，为改函数的返回值
-void byte2char(char data[3], char *r)//返回数组大小为4
-{
-    unsigned int a = (unsigned int)((int)data[0] + 128) + (unsigned int)((int)data[1] + 128) * 256 + (unsigned int)((int)data[2] + 128) * 256 * 256;
-	unsigned int b1 = a % 64;   //得到4个0-63的数字
-	unsigned int b2 = ((a - b1) / 64) % 64;
-	unsigned int b3 = (a - b1 - 64 * b2) / (64 * 64) % 64;
-	unsigned int b4 = (a - b1 - 64 * b2 - 64 * 64 * b3) / (64 * 64 * 64) % 64;
-    //char r[4];
-    r[0] = QUEEN[b1];
-    r[1] = QUEEN[b2];
-    r[2] = QUEEN[b3];
-    r[3] = QUEEN[b4];
-
-}
-
-//传入数据data，r是一个3个字节的指针，为改函数的返回值(还没增加代码健壮性)
-void char2byte(char data[4], char *r)//返回数组大小为3
-{
-    unsigned int b1 = QUEEN.find(data[0]);
-    unsigned int b2 = QUEEN.find(data[1]);
-    unsigned int b3 = QUEEN.find(data[2]);
-    unsigned int b4 = QUEEN.find(data[3]);
-    unsigned a = b1 + b2 * 64 + b3 * 64 * 64 + b4 * 64 * 64 * 64;
-    int a1 = a % 256;
-	int a2 = ((a - a1) / 256) % 256;
-	int a3 = (a - a1 - 256 * a2) / (256 * 256) % 256;
-
-    //char r[3];
-    r[0] = a1 - 128;
-    r[1] = a2 - 128;
-    r[2] = a3 - 128;
-}
-
-char char_set[] = {'a','s'};//正在求解算法
 
 class FileSecret
 {
@@ -57,6 +21,8 @@ private:
     std::fstream in_stream;     //文件输入流
     std::fstream out_stream;    //文件输出流
     int mode;//10001编码，10002解码
+
+    long file_length;
 
     void init()
     {
@@ -78,13 +44,61 @@ private:
 
     void encode()
     {
-        
+        //缓冲池
+        char* chs = new char[ENCODE_BUFFER_SIZE];
+        //处理池
+        char *outch = new char[ENCODE_BUFFER_SIZE * 4 / 3];
+        //剩余未读大小
+        int unread_size;
+        //done为已经处理的数据，每次循环处理buffer字节的数据，
+        for(long done = 0; done < file_length; done += ENCODE_BUFFER_SIZE)
+        {
+            unread_size = file_length - done;
+            if(unread_size < ENCODE_BUFFER_SIZE)
+            {
+                //如果小于buffer则不一定是整三的倍数，补零处理（以后再写）
+                if(unread_size % 3 == 0)
+                {
+                    in_stream.read(chs, unread_size);
+                    for(int j = 0; j < unread_size / 3; j++)
+                    {
+                        byte2char(chs + (3 * j), outch + (4 * j));
+                    }
+                    out_stream.write(outch, unread_size * 4 / 3);
+                }
+                else
+                {
+                    in_stream.read(chs, unread_size);
+                    for(int j = 0; j < 3- (unread_size % 3); j++)
+                    {
+                        chs[unread_size + j] = 0;//后面的两位置零
+                    }
+                    long v_size = unread_size + 3 - (unread_size % 3);//虚拟大小，后部补到3的整数位
+                    for(int j = 0; j < v_size / 3; j++)
+                    {
+                        byte2char(chs + (3 * j), outch + (4 * j));
+                    }
+                    out_stream.write(outch, v_size * 4 / 3);
+                }
+            }
+            else
+            {
+                in_stream.read(chs, ENCODE_BUFFER_SIZE);
+                //三个字节的头指针
+                for(int j = 0; j < ENCODE_BUFFER_SIZE / 3; j++)
+                {
+                    byte2char(chs + (3 * j), outch + (4 * j));
+                }
+                out_stream.write(outch, ENCODE_BUFFER_SIZE * 4 / 3);
+            }
+        }
     }
 
     void decode()
     {
 
     }
+
 public:
     FileSecret(string file_dir, int mode)//10001编码，10002解码
     {
@@ -100,6 +114,9 @@ public:
     {
         if(mode == FILE_ENCODE)//二进制进，文本出
         {
+            in_stream.seekg(0, in_stream.end);
+	        file_length = in_stream.tellg();
+	        in_stream.seekg(0, in_stream.beg);
             encode();
         }
         else//文本进，二进制出
@@ -116,12 +133,15 @@ public:
 
 };
 
-int main()
+int main(int argc, char* argv[])
 {
     //先要求输入相对位置，方便使用，和开源项目SCC一样，后期再支持参数等方式
-    std::cout << "输入文件名（在同文件夹输入相对位置）：";
-    string file_dir;
-    std::cin >> file_dir;
+    // std::cout << "输入文件名（在同文件夹输入相对位置）：";
+    // string file_dir;
+    // std::cin >> file_dir;
+
+    FileSecret fs("LICENSE", FILE_ENCODE);
+    fs.run();
 
     return 0;
 }
