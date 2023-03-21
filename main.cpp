@@ -18,6 +18,7 @@ int main(int argc, char *argv[])
     int func;
     cout << "请选择  1.编码   2.解码\n选择：";
     int s;
+    cin >> s;
 
     switch (s)
     {
