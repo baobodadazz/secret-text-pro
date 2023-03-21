@@ -14,7 +14,7 @@ int main(int argc, char* argv[])
     // string file_dir;
     // std::cin >> file_dir;
 
-    FileSecret fs("LICENSE", FILE_ENCODE);
+    FileSecret fs("encode_bg.jpg", FILE_DECODE);
     fs.run();
 
     return 0;
